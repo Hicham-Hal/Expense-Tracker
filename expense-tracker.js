@@ -11,7 +11,6 @@ const handleError = (message) => {
     process.exit(1)
 }
 
-
 const getFlagValue = (flagName) => {
     const index = argv.indexOf(flagName)
     if(index === -1){
@@ -50,6 +49,7 @@ const addExp = async() => {
             id: expData.length ? Math.max(...expData.map(t => t.id)) + 1 : 1,
             description: getFlagValue('--description'),
             amount: Number(getFlagValue('--amount')),
+            category: getFlagValue('--category') || 'general',
             date: new Date().toLocaleDateString('en-GB').replaceAll('/', '-'),
         }
 
@@ -94,6 +94,7 @@ const updateExp = async() => {
         const newAmount = getFlagValue('--amount')
         exp.amount = newAmount !== undefined && newAmount !== null ? Number(newAmount) : exp.amount
         exp.date = new Date().toLocaleDateString('en-GB').replaceAll('/', '-')
+        exp.category = getFlagValue('--category') || exp.category
 
         await fs.promises.writeFile(path.join(__dirname, 'data.json'), JSON.stringify(expData))
         console.log(`Expense updated successfully (ID: ${exp.id})`)
@@ -175,6 +176,44 @@ const getSummaryFiltered = async() => {
     }
 }
 
+const getCategory = async() => {
+    try{
+        const data = await fs.promises.readFile(path.join(__dirname, 'data.json'), 'utf8')
+        if(!data){
+            handleError('No such file found')
+            return
+        }
+
+        const category = getFlagValue('--category')
+        if(!category){
+            handleError('You must provide a category name with --category')
+            return
+        }
+
+        const dataList = JSON.parse(data)
+        const catList = dataList.filter(i => i.category === category)
+        if(catList.length === 0){
+            console.log(`No data found with category: ${category}`)
+        }
+        console.log(
+            'ID'.padEnd(4) +
+            "Description".padEnd(14) +
+            "Date".padEnd(14) +
+            "Amount"
+        )
+        catList.map(i => {
+            console.log(
+                String(i.id).padEnd(4) +
+                i.description.padEnd(14) +
+                i.date.padEnd(14) +
+                `$${i.amount}`
+            )
+        })
+    }catch(err){
+        console.log(err)
+    }
+}
+
 const deleteExp = async() => {
     try{
         const data = await fs.promises.readFile(path.join(__dirname, 'data.json'), 'utf8')
@@ -210,8 +249,13 @@ const main = async() => {
                 updateExp()
                 break;
             case "list":
-                getListExp()
-                break;
+                if(argv.length === 3){
+                    getListExp()
+                    break;
+                }else if(argv.length > 3){
+                    getCategory()
+                    break;
+                }
             case ("summary"):
                 if(argv.length === 3){
                     getSummary()
