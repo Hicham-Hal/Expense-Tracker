@@ -45,6 +45,7 @@ const addExp = async() => {
             handleError(`Amount must be a positive number`)
             return
         }
+        const budget = getFlagValue('--budget')
         const newExp = {
             id: expData.length ? Math.max(...expData.map(t => t.id)) + 1 : 1,
             description: getFlagValue('--description'),
@@ -96,7 +97,7 @@ const updateExp = async() => {
         exp.date = new Date().toLocaleDateString('en-GB').replaceAll('/', '-')
         exp.category = getFlagValue('--category') || exp.category
 
-        await fs.promises.writeFile(path.join(__dirname, 'data.json'), JSON.stringify(expData))
+        fs.promises.writeFile(path.join(__dirname, 'data.json'), JSON.stringify(expData))
         console.log(`Expense updated successfully (ID: ${exp.id})`)
     }catch(err){
         console.log(err)
@@ -171,6 +172,49 @@ const getSummaryFiltered = async() => {
         }
         const totalAmount = filtered.reduce((sum, i) => sum + i.amount, 0)
         console.log(`Total expenses for ${getMonthName(month)} : ${totalAmount}$`)
+    }catch(err){
+        console.log(err)
+    }
+}
+
+let budgetData = []
+const setBudget = async() => {
+    try{
+        const budget = getFlagValue('--budget')
+        const month = getFlagValue('--month')
+        if(!budget){
+            handleError(`You must provide an Budget with --budget'`)
+            return
+        }
+        if(!month){
+            handleError(`You must provide an Month with --month`)
+            return
+        }
+        if(month < 1 || month > 12){
+            handleError('Month must be between 1-12')
+            return
+        }
+
+        if(fs.existsSync(path.join(__dirname, 'budget.json'))){
+            const data = await fs.promises.readFile(path.join(__dirname, 'budget.json'), 'utf8')
+            budgetData = JSON.parse(data)
+        }
+        budgetData.map(i => {
+            if(i.month === Number(month)){
+                handleError(`${getMonthName(i.month)} already has a budget`)
+                return
+            }
+        })
+        const newBudget = {
+            budget: budget,
+            month: Number(month),
+            year: new Date().getFullYear()
+        }
+
+        budgetData.push(newBudget)
+
+        fs.promises.writeFile(path.join(__dirname, 'budget.json'), JSON.stringify(budgetData))
+
     }catch(err){
         console.log(err)
     }
@@ -266,6 +310,9 @@ const main = async() => {
                 }
             case "delete":
                 deleteExp()
+                break;
+            case "budget":
+                setBudget()
                 break;
             default:
                 handleError(`argv 2 argument must be those values add update list summary delete`)
