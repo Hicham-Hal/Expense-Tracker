@@ -1,9 +1,1 @@
-[
-    {
-        "id": 1,
-        "description": "salut-lalala",
-        "amount": 3082,
-        "category": "greeting",
-        "date": "27-07-2026"
-    }
-]
+[{"id":1,"description":"hello there","amount":10,"category":"greeting","date":"28-07-2026"},{"id":2,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"},{"id":3,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"},{"id":4,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"},{"id":5,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"},{"id":6,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"},{"id":7,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"},{"id":8,"description":"salut","amount":120,"category":"greeting","date":"28-07-2026"}]

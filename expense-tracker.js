@@ -17,6 +17,12 @@ const getFlagValue = (flagName) => {
         // handleError(`flag name should be correct: ${flagName}`)
         return
     };
+
+    const value = argv[index + 1]
+
+    if(value === undefined || value.startsWith('--')){
+        return null
+    }
     return argv[index + 1] || null;
 }
 
@@ -25,13 +31,15 @@ const getMonthName = (monthNumber) => {
     return date.toLocaleString('en-US', {month: 'long'})
 }
 
-let expData = [];
 
+let expData = [];
 const addExp = async() => {
     try{
         if(fs.existsSync(path.join(__dirname, 'data.json'))){
             const data = await fs.promises.readFile(path.join(__dirname, 'data.json'), 'utf8')
-            expData = JSON.parse(data)
+            if(data){
+                expData = JSON.parse(data)
+            }
         }
         if(!getFlagValue('--description')){
             handleError('You must provide a description with --description')
@@ -45,7 +53,6 @@ const addExp = async() => {
             handleError(`Amount must be a positive number`)
             return
         }
-        const budget = getFlagValue('--budget')
         const newExp = {
             id: expData.length ? Math.max(...expData.map(t => t.id)) + 1 : 1,
             description: getFlagValue('--description'),
@@ -53,7 +60,23 @@ const addExp = async() => {
             category: getFlagValue('--category') || 'general',
             date: new Date().toLocaleDateString('en-GB').replaceAll('/', '-'),
         }
-
+        if(fs.existsSync(path.join(__dirname, 'budget.json'))){
+            const limitBudget = await getBudget(Number(newExp.date.split('-')[1]), Number(newExp.date.split('-')[2]))
+            const dataMonth = expData.filter(i => (Number(i.date.split('-')[1]) === Number(newExp.date.split('-')[1]) && (Number(i.date.split('-')[2]) === Number(newExp.date.split('-')[2]))))
+            if(dataMonth.length > 0){
+                const totalAmountMonth = dataMonth.reduce((sum, i) => sum + i.amount, 0) + newExp.amount
+                if(totalAmountMonth > limitBudget){
+                    console.log(`Warning: you are acceding the limit budget so this expense would not be added`)
+                    return
+                }
+                if((limitBudget - totalAmountMonth) === 0){
+                    console.log(`Warning: You hit the limit budget, the next expense wouldn't be added`)
+                }
+                if((limitBudget - totalAmountMonth) < 100 && (limitBudget - totalAmountMonth) > 0){
+                    console.log(`Warning: you are almost to reach the limit budget: ${limitBudget - totalAmountMonth}$`)
+                }
+            }
+        }
         expData.push(newExp)
 
         fs.promises.writeFile(path.join(__dirname, 'data.json'), JSON.stringify(expData))
@@ -91,11 +114,28 @@ const updateExp = async() => {
                 return
             }
         }
+
         exp.description = getFlagValue('--description') || exp.description
         const newAmount = getFlagValue('--amount')
         exp.amount = newAmount !== undefined && newAmount !== null ? Number(newAmount) : exp.amount
         exp.date = new Date().toLocaleDateString('en-GB').replaceAll('/', '-')
         exp.category = getFlagValue('--category') || exp.category
+        if(fs.existsSync(path.join(__dirname, 'budget.json'))){
+            const limitBudget = await getBudget(Number(exp.date.split('-')[1]), Number(exp.date.split('-')[2]))
+            const dataMonth = expData.filter(i => (Number(i.date.split('-')[1]) === Number(exp.date.split('-')[1]) && (Number(i.date.split('-')[2]) === Number(exp.date.split('-')[2]))))
+            if(dataMonth.length > 0){
+                const totalAmountMonth = dataMonth.reduce((sum, i) => sum + i.amount, 0)
+                if(totalAmountMonth > limitBudget){
+                    console.log(`Warning: you are acceding the limit budget so this expense would not be added`)
+                    return
+                }
+                if((limitBudget - totalAmountMonth) === 0){
+                    console.log(`Warning: You reach the limit budget`)
+                }else if((limitBudget - totalAmountMonth) < 100 && (limitBudget - totalAmountMonth) > 0){
+                    console.log(`Warning: you are almost to reach the limit budget: ${limitBudget - totalAmountMonth}$`)
+                }
+            }
+        }
 
         fs.promises.writeFile(path.join(__dirname, 'data.json'), JSON.stringify(expData))
         console.log(`Expense updated successfully (ID: ${exp.id})`)
@@ -182,6 +222,7 @@ const setBudget = async() => {
     try{
         const budget = getFlagValue('--budget')
         const month = getFlagValue('--month')
+        const year = getFlagValue('--year') || new Date().getFullYear()
         if(!budget){
             handleError(`You must provide an Budget with --budget'`)
             return
@@ -200,15 +241,15 @@ const setBudget = async() => {
             budgetData = JSON.parse(data)
         }
         budgetData.map(i => {
-            if(i.month === Number(month)){
+            if(i.month === Number(month) && i.year === Number(year)){
                 handleError(`${getMonthName(i.month)} already has a budget`)
                 return
             }
         })
         const newBudget = {
-            budget: budget,
+            budget: Number(budget),
             month: Number(month),
-            year: new Date().getFullYear()
+            year: Number(year),
         }
 
         budgetData.push(newBudget)
@@ -220,6 +261,28 @@ const setBudget = async() => {
     }
 }
 
+const getBudget = async(month, year) => {
+    try{
+        if(!fs.existsSync(path.join(__dirname, 'budget.json'))){
+            handleError('No such file exist')
+            return
+        }
+
+        const data = await fs.promises.readFile(path.join(__dirname, 'budget.json'))
+        const budgetData = JSON.parse(data)
+        let budgetRequired
+        budgetData.map(i => {
+            if(i.month === Number(month) && i.year === Number(year)){
+                budgetRequired = i.budget
+            }
+        })
+        return budgetRequired
+    }catch(err){
+        console.log(err)
+    }
+}
+
+
 const getCategory = async() => {
     try{
         const data = await fs.promises.readFile(path.join(__dirname, 'data.json'), 'utf8')
@@ -227,13 +290,13 @@ const getCategory = async() => {
             handleError('No such file found')
             return
         }
-
+        
         const category = getFlagValue('--category')
         if(!category){
             handleError('You must provide a category name with --category')
             return
         }
-
+        
         const dataList = JSON.parse(data)
         const catList = dataList.filter(i => i.category === category)
         if(catList.length === 0){
@@ -283,6 +346,71 @@ const deleteExp = async() => {
     }
 }
 
+const exportCsv = async() => {
+    try{
+        if(!fs.existsSync(path.join(__dirname, 'data.json'))){
+            handleError("No such file found")
+            return
+        }
+        const data = await fs.promises.readFile(path.join(__dirname, 'data.json'), 'utf8')
+        if(!data){
+            handleError('File is empty')
+            return
+        }
+        const exportedData = JSON.parse(data)
+        if(exportedData.length === 0){
+            handleError('Empty expense list')
+            return
+        }
+        const header = Object.keys(exportedData[0]).join(',')
+        const rows = exportedData.map(row => Object.values(row).join(','))
+        const csvContent = [header, ...rows].join('\n')
+        fs.writeFileSync(path.join(__dirname, 'exprense.csv'), csvContent, 'utf-8')
+        console.log(`Csv file created successfully`)
+    }catch(err){
+        console.log(err)
+    }
+}
+
+const updateBudget = async () => {
+    try{
+        if(!fs.existsSync(path.join(__dirname, 'budget.json'))){
+            handleError(`No such file found`)
+            return
+        }
+        const budget = getFlagValue('--budget')
+        const month = getFlagValue('--month')
+        const year = getFlagValue('--year') || new Date().getFullYear()
+        if(!budget){
+            handleError('You must provide a budget with --budget')
+            return
+        }
+
+        if(!month || month.length === 0){
+            handleError('You must provide a month with --month')
+            return
+        }
+
+        const data = await fs.promises.readFile(path.join(__dirname, 'budget.json'), 'utf8')
+        if(!data){
+            handleError('No data found, file empty')
+            return
+        }
+        const budgetData = JSON.parse(data)
+        const budDt = budgetData.find(i => (i.month === Number(month)) && (i.year === Number(year)))
+        if(!budDt){
+            handleError(`No budget found on month: ${getMonthName(Number(month))}, year: ${year}`)
+            return
+        }
+        budDt.budget = Number(budget)
+
+        fs.promises.writeFile(path.join(__dirname, 'budget.json'), JSON.stringify(budgetData))
+        console.log(`Budget updated successfully`)
+    }catch(err){
+        console.log(err)
+    }
+}
+
 const main = async() => {
     try{
         switch (argv[2]) {
@@ -292,30 +420,36 @@ const main = async() => {
             case "update":
                 updateExp()
                 break;
-            case "list":
-                if(argv.length === 3){
-                    getListExp()
-                    break;
-                }else if(argv.length > 3){
-                    getCategory()
-                    break;
-                }
+                case "list":
+                    if(argv.length === 3){
+                        getListExp()
+                        break;
+                    }else if(argv.length > 3){
+                        getCategory()
+                        break;
+                    }
             case ("summary"):
-                if(argv.length === 3){
-                    getSummary()
-                    break;
-                }else if(argv.length > 3){
-                    getSummaryFiltered()
-                    break
-                }
+            if(argv.length === 3){
+                getSummary()
+                break;
+            }else if(argv.length > 3){
+                getSummaryFiltered()
+                break
+            }
             case "delete":
                 deleteExp()
                 break;
             case "budget":
                 setBudget()
                 break;
+            case "update-budget":
+                    updateBudget()
+                    break;
+            case "csv":
+                exportCsv()
+                break;
             default:
-                handleError(`argv 2 argument must be those values add update list summary delete`)
+                handleError(`argv 2 argument must be those values add update list summary delete ...`)
                 return
         }
     }catch(err){
